@@ -1,0 +1,6 @@
+# TODO list for Raspberry Pi
+
+1. TCP Communication
+2. UDP Communication
+3. I2C Connection
+4. Kalman-Filter
