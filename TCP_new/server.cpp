@@ -1,9 +1,18 @@
 /***** TCP SERVER *****/
 
+#include <iostream>
 #include <cstdio>
+#include <cstdlib>
+#include <unistd.h>
+#include <errno.h>
+#include <cstring>
 #include <sys/types.h>
 #include <sys/socket.h>
+#include <netinet/in.h>
 #include <netdb.h>
+#include <arpa/inet.h>
+#include <sys/wait.h>
+#include <signal.h>
 
 using namespace std;
 
@@ -30,7 +39,7 @@ int main()
 {
 
     // Set listening port of server
-    const int port = 2420;
+    const char *port = "2420";
     
     // Prepare TCP connection
     int status;
@@ -45,15 +54,16 @@ int main()
     // Call getaddrinfo() and throw error if not succesful
     if ((status = getaddrinfo(NULL, port, &server_specs, &result)) != 0) {
         cerr << "Error calling getaddrinf(): " << gai_strerror(status) << endl;
-        return(1);
+        return 1;
     }
 
     // Loop through server info and bind to first valid entry 
     struct addrinfo *server_info;
-    for (server_info = result, server_info != NULL, server_info->server_info.ai_next) {
+    int yes = 1;
+    int sockfd;
+    for (server_info = result; server_info != NULL; server_info->ai_next) {
 
         // Get socket descriptor
-        int sockfd;
         if ((sockfd = socket(server_info->ai_family, 
                              server_info->ai_socktype, 
                              server_info->ai_protocol)) != 0) {
@@ -93,6 +103,7 @@ int main()
     }
 
     // Reap all dead processes
+    struct sigaction sa;
     sa.sa_handler = sigchld_handler;
     sigemptyset(&sa.sa_mask);
     sa.sa_flags = SA_RESTART;
@@ -104,6 +115,10 @@ int main()
     cout << " server: waiting for connections... " << endl;
 
     // Main loop for accept()ing clients
+    struct sockaddr_storage their_addr;
+    socklen_t sin_size;
+    int new_fd;
+    char s[INET6_ADDRSTRLEN];
     while(1) {
         sin_size = sizeof(their_addr);
         new_fd = accept(sockfd, (struct sockaddr *)&their_addr, &sin_size);
