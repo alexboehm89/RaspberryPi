@@ -1,63 +1,94 @@
-/*
-   client.cpp
-
-   Test client for the tcpsockets classes. 
-
-   ------------------------------------------
-
-   Copyright (c) 2013 Vic Hargrave
-
-   Licensed under the Apache License, Version 2.0 (the "License");
-   you may not use this file except in compliance with the License.
-   You may obtain a copy of the License at
-
-       http://www.apache.org/licenses/LICENSE-2.0
-
-   Unless required by applicable law or agreed to in writing, software
-   distributed under the License is distributed on an "AS IS" BASIS,
-   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-   See the License for the specific language governing permissions and
-   limitations under the License.
-*/
-
-#include <stdio.h>
-#include <stdlib.h>
-#include <string>
-#include "tcpconnector.h"
+#include <iostream>
+#include <cstdio>
+#include <cstdlib>
+#include <cstring>
+#include <unistd.h>
+#include <errno.h>
+#include <netdb.h>
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
 
 using namespace std;
 
-int main(int argc, char** argv)
+
+
+// Get sockaddr, IPv4 or IPv6
+void *get_in_addr(struct sockaddr *sa)
 {
-    if (argc != 4) {
-        printf("usage: %s <port> <ip> <message>\n", argv[0]);
+    if (sa->sa_family == AF_INET) {
+        return &(((struct sockaddr_in*)sa)->sin_addr);
+    }
+
+    return &(((struct sockaddr_in6*)sa)->sin6_addr);
+}
+
+int main(int argc, char *argv[])
+{
+    const char *port = "2420";
+    const int max_data_size = 100;
+    int sockfd;
+    int num_bytes;
+    char buf[max_data_size];
+    struct addrinfo hints;
+    struct addrinfo *servinfo;
+    struct addrinfo *p;
+    char s[INET6_ADDRSTRLEN];
+    int rv;
+
+    if (argc =! 2) {
+        cerr << "usage: client hostname" << endl;
         exit(1);
     }
 
-    int len;
-    string message = argv[3];
-    char line[256];
-    TCPConnector* connector = new TCPConnector();
-    TCPStream* stream = connector->connect(argv[2], atoi(argv[1]));
-    if (stream) {
-        stream->send(message.c_str(), message.size());
-        printf("sent - %s\n", message.c_str());
-        len = stream->receive(line, sizeof(line));
-        line[len] = 0;
-        printf("received - %s\n", line);
-        delete stream;
+    memset(&hints, 0, sizeof(hints));
+    hints.ai_family = AF_UNSPEC;
+    hints.ai_socktype = SOCK_STREAM;
+
+    if ((rv = getaddrinfo(argv[1], port, &hints, &servinfo)) != 0) {
+        cerr << "getaddrinfo: " << gai_strerror(rv) << endl;
+        return 1;
     }
-/*
-    stream = connector->connect(argv[2], atoi(argv[1]));
-    if (stream) {
-        message = "Why is there air?";
-        stream->send(message.c_str(), message.size());
-        printf("sent - %s\n", message.c_str());
-        len = stream->receive(line, sizeof(line));
-        line[len] = 0;
-        printf("received - %s\n", line);
-        delete stream;
+
+    // Loop through all results
+    for ( p= servinfo; p != NULL; p->ai_next) {
+        if ((sockfd = socket(p->ai_family, p->ai_socktype, p->ai_protocol)) == -1) {
+            cerr << "client: socket" << endl;
+            continue;
+        }
+
+        if (connect(sockfd, p->ai_addr, p->ai_addrlen) == -1) {
+            close(sockfd);
+            cerr << "Client: connect" << endl;
+            continue;
+        }
+
+        break;
     }
-    exit(0);
-    */
+
+    if (p == NULL) {
+        cerr << "client: failed to connect" << endl;
+        return 2;
+    }
+
+    inet_ntop(p->ai_family, get_in_addr((struct sockaddr *)p->ai_addr), s, sizeof(s));
+
+    freeaddrinfo(servinfo);
+
+    if ((num_bytes == recv(sockfd, buf, max_data_size-1, 0)) == -1) {
+        cerr << "recv" << endl;
+        exit(1);
+    }
+
+    buf[num_bytes] = '\0';
+
+    cout << "client: received " << s << endl;
+
+    close(sockfd);
+
+    return 0;
 }
+
+
+    
